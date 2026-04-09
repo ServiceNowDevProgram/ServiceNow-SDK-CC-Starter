@@ -1,4 +1,4 @@
-Fetch open GitHub issues labeled `ready` and work through them systematically using worktree-isolated agents for parallel work.
+Fetch open GitHub issues labeled `ready` and work through them using worktree-isolated agents, then merge all changes back into main for immediate deployment.
 
 Arguments: $ARGUMENTS (optional — space- or comma-separated issue numbers to limit scope, e.g. "3 7 12". Explicit numbers bypass the `ready` label requirement.)
 
@@ -23,7 +23,14 @@ For every issue, determine:
 - Complexity: small (1–2 files), medium (3–5 files), large (6+ files or cross-layer)
 - Dependencies on other issues (shared files = must run sequentially)
 
-To understand the project structure, read CLAUDE.md (if it exists) and explore the repo's directory layout using Glob/Grep. Identify which areas of the codebase each issue is likely to touch.
+Project area map:
+- **Frontend components**: `src/client/components/` — React JSX + paired CSS (Name.jsx + Name.css)
+- **Frontend services**: `src/client/services/` — API service modules (plain JS)
+- **Frontend pages**: `src/client/` root — top-level page JSX + HTML entry points
+- **Server logic**: `src/server/script-includes/`, `src/server/rest-handlers/`, `src/server/rest-api/` — ServiceNow server-side JS
+- **Fluent definitions**: `src/fluent/` — TypeScript .now.ts files defining tables, seed data, business rules, navigation, form layouts
+- **Fluent script includes**: `src/fluent/script-includes/` — .now.ts wrappers for server script includes
+- **Build/config**: `package.json`, root config files
 
 ## Step 3: Build execution plan
 
@@ -38,12 +45,12 @@ Log the full execution plan:
 ## Execution Plan
 
 ### Batch 1 (parallel)
-- #3: Fix timer reset → src/components/Timer.js
-- #7: Add export button → src/components/Panel.js, src/services/Export.js
+- #3: Fix draft timer reset → src/client/components/DraftTimer.jsx
+- #7: Add export button → src/client/components/PortfolioPanel.jsx, src/client/services/ExportService.js
 
 ### Batch 2 (after Batch 1)
-- #12: Update display logic → src/components/Score.js, src/config/settings.js
-⚠️ Sequential — shares settings.js with a prior dependency
+- #12: Update scoring display → src/client/components/ScoreBar.jsx, src/fluent/seed-data.now.ts
+⚠️ Sequential — shares seed-data.now.ts with a prior dependency
 ```
 
 Proceed immediately without asking for approval.
@@ -59,22 +66,27 @@ For each batch:
 
 2. For each issue in the batch, launch a sub-agent with `isolation: "worktree"` using this prompt structure:
 
+   > You are fixing a bug / implementing a feature for AICTsdk — "AI Control Tower: CoE Draft & Defend," a competitive ServiceNow scoped application used at Knowledge 26.
+   >
    > ## Issue #<NUMBER>: <TITLE>
    > <BODY>
    >
-   > ## Project Context
-   > Read CLAUDE.md at the repo root for project description and conventions. If it doesn't exist, explore the repo structure to understand the tech stack and patterns before making changes.
+   > ## Project Conventions
+   > - **Frontend**: React 18 JSX with plain CSS. Components live in `src/client/components/` as paired files: `Name.jsx` + `Name.css`. No TypeScript on the client. CSS uses plain classes — no modules, no CSS-in-JS. Import the CSS file at the top of the JSX file.
+   > - **Services**: API modules in `src/client/services/` (plain JS). Follow existing patterns in nearby files.
+   > - **Server**: ServiceNow Script Includes and REST handlers in `src/server/`. Server-side JavaScript using GlideRecord API and scoped app patterns.
+   > - **Fluent layer**: TypeScript `.now.ts` files in `src/fluent/` using @servicenow/sdk 4.4.0 Fluent API (createTable, createBusinessRule, createScriptInclude, etc.).
+   > - **CSS file size**: Keep individual CSS files under ~13KB to avoid SDK extraction bugs on Windows.
    >
    > ## Files to Read First
    > - <list of relevant files from your analysis>
    >
    > ## Task
-   > 1. Read CLAUDE.md and understand the project conventions
-   > 2. Read and understand the relevant code
-   > 3. Make the minimal change needed to address this issue
-   > 4. Do NOT refactor surrounding code or add unrelated improvements
-   > 5. Run `npm run build` to verify compilation succeeds
-   > 6. Do NOT commit — leave changes uncommitted in the worktree for review
+   > 1. Read and understand the relevant code
+   > 2. Make the minimal change needed to address this issue
+   > 3. Do NOT refactor surrounding code or add unrelated improvements
+   > 4. Run `npm run build` to verify compilation succeeds
+   > 5. Do NOT commit — leave changes uncommitted in the worktree
    >
    > When done, report: which files were modified and a brief description of what changed.
 
@@ -97,7 +109,49 @@ For each batch:
    )"
    ```
 
-## Step 5: Present summary
+## Step 5: Merge all changes into main
+
+After all batches complete:
+
+1. List all worktrees: `git worktree list`
+
+2. For each worktree (excluding the main working tree):
+   - Extract the issue number from the branch name (pattern: `issue-<number>-<slug>`)
+   - Stage all changes in the worktree:
+     ```
+     git -C <path> add -A
+     ```
+   - Commit in the worktree:
+     ```
+     git -C <path> commit -m "$(cat <<'EOF'
+     Issue #<number>: <concise description of what changed>
+
+     Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+     EOF
+     )"
+     ```
+
+3. Determine merge order — if worktrees have overlapping files, merge sequentially and resolve conflicts.
+
+4. For each worktree branch, merge into main:
+   ```
+   git merge <branch> --no-ff --no-edit
+   ```
+   If a merge conflict occurs, resolve it using context from both issues and note the resolution in the summary.
+
+   **Important:** Do NOT use `Closes #N` or `Fixes #N` anywhere — issues must stay open until the user validates and runs `/git-issues-end`.
+
+5. Clean up each worktree after merging:
+   ```
+   git worktree remove <path>
+   git branch -d <branch>
+   ```
+
+6. Run `npm run build` on main to verify everything compiles cleanly.
+   - If the build fails, diagnose and fix, then create an additional commit: "Fix build error after merging issue #<number>"
+   - Run `npm run build` again to confirm it passes.
+
+## Step 6: Present summary
 
 Print a results table:
 
@@ -106,15 +160,19 @@ Print a results table:
 
 List any issues that were skipped (ambiguous, conflicted, or failed) with reasons.
 
-Provide testing instructions:
-1. Review changes in each worktree (list worktree paths)
-2. For each worktree, run `npm run build` to verify compilation
-3. Deploy to test the changes
-4. When satisfied, run `/git-issues-end` to commit, push, and clean up
+All changes are now in main and worktrees have been cleaned up.
+
+Next steps:
+1. Run `/deploy` to build and deploy to the ServiceNow instance
+2. Test each change on the instance
+3. If further changes are needed, re-run `/git-issues-start` with specific issue numbers (e.g. `/git-issues-start 3 7`)
+4. When all changes are verified, run `/git-issues-end` to push and close issues
 
 ## Rules
 - Do NOT ask for approval or confirmation at any point — just do the work
 - Use `isolation: "worktree"` for each parallel agent to prevent conflicts
 - If an issue is ambiguous or clearly depends on out-of-scope changes, skip it and flag it in the summary
 - Prefer minimal, focused fixes — do not let agents refactor or over-engineer
-- Do NOT commit — leave that for `/git-issues-end`
+- Do NOT push to remote — leave that for `/git-issues-end`
+- Do NOT use `Closes` or `Fixes` in commit messages — issues must stay open until the user explicitly runs `/git-issues-end`
+- Always clean up worktrees and branches after merging into main

@@ -1,128 +1,64 @@
-Survey all worktree changes from a previous /git-issues-start run, commit them with proper issue-closing references, push, and clean up.
+Push committed changes to remote, close all issues that were worked on, remove labels, and post closing comments.
 
-## Step 1: Survey changes
+## Step 1: Identify issues that were worked on
 
-1. List all worktrees: `git worktree list`
-2. For each worktree (excluding the main working tree):
-   - Run `git -C <path> status` and `git -C <path> diff --stat`
-   - Extract the issue number from the branch name (pattern: `issue-<number>-<slug>`)
-   - Note all modified, added, or deleted files
-3. Check the main working tree too: `git status` and `git diff --stat`
-
-## Step 2: Map changes to issues
-
-Cross-reference changed files with bot comments from /git-issues-start:
+Scan recent commits ahead of the remote for issue references:
 ```
-gh issue view <number> --comments
+git log --oneline --grep="Issue #" origin/main..HEAD
 ```
 
-Build a mapping table:
+Extract all issue numbers from commits matching the `Issue #N` pattern.
 
-| Issue | Branch | Files Changed | Overlaps With |
-|-------|--------|---------------|---------------|
-
-## Step 3: Decide commit strategy
-
-Choose automatically based on how changes are structured:
-
-- **Per-issue commits** (preferred): one commit per issue with `Closes #N`. Use when issues touch different files.
-- **Grouped commits**: combine issues that share modified files into one commit referencing all: `Closes #N, Closes #M`. Use when files overlap.
-- **Single commit**: everything in one commit. Use only when total changes are trivially small.
-
-Log the chosen strategy and reasoning.
-
-## Step 4: Create commits
-
-For each commit:
-
-1. Merge the worktree branch: `git merge <branch> --no-ff --no-edit`
-   - Resolve any merge conflicts and note what was resolved.
-
-2. If the auto-generated merge commit message does not match project style, amend it to follow the convention below.
-
-**Commit message format:**
+If no issue-referencing commits are found ahead of origin/main, also check for open issues with the `ready` label as a fallback:
 ```
-<Verb> <concise description of what changed>
-
-Closes #N
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+gh issue list --state open --label "ready" --json number,title --limit 100
 ```
 
-Style rules:
-- Imperative verb + description (e.g., "Fix draft timer reset on page reload", "Add portfolio export button")
-- No conventional-commit prefixes (no "feat:", "fix:", "chore:")
-- No emojis
-- `Closes #N` on its own line after a blank line
-- `Co-Authored-By` on the final line
+If still no issues found, report that there are no issues to finalize and stop.
 
-Example for a single issue:
+Present the list of issues to be closed:
+
+| Issue | Title | Referenced in Commit |
+|-------|-------|---------------------|
+
+## Step 2: Push to remote
+
 ```
-Fix draft timer not resetting when resuming a session
-
-Closes #3
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+git push
 ```
 
-Example for grouped issues:
-```
-Update event scoring values and portfolio budget validation
+If the push fails (e.g., behind remote), report the error and stop — do not force push.
 
-Closes #8
-Closes #11
+## Step 3: Close issues and clean up
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-```
+For each issue identified in Step 1:
 
-Use a HEREDOC to create the commit:
-```bash
-git commit -m "$(cat <<'EOF'
-<message here>
-EOF
-)"
-```
-
-## Step 5: Verify build
-
-Run `npm run build` to confirm the merged changes compile cleanly.
-
-If the build fails:
-- Diagnose and fix the issue
-- Create an additional commit: "Fix build error after merging issue #N"
-- Run `npm run build` again to confirm it passes
-
-## Step 6: Push and comment
-
-1. Push: `git push`
-2. For each closed issue, comment with the commit hash and remove the `ready` label:
+1. Close the issue:
    ```
-   gh issue comment <number> --body "Resolved in commit <hash>."
+   gh issue close <number>
+   ```
+
+2. Remove the `ready` label:
+   ```
    gh issue edit <number> --remove-label "ready"
    ```
 
-## Step 7: Clean up worktrees
+3. Post a closing comment:
+   ```
+   gh issue comment <number> --body "Resolved and deployed. Closed via /git-issues-end."
+   ```
 
-For each worktree created by /git-issues-start:
-```
-git worktree remove <path>
-git branch -d <branch>
-```
-
-If a branch can't be deleted with `-d` (not fully merged), investigate before using `-D`.
-
-## Step 8: Final summary
+## Step 4: Final summary
 
 Print a summary table:
 
-| Issue | Title | Commit | Status |
+| Issue | Title | Status | Commit |
 |-------|-------|--------|--------|
 
-Report totals: issues closed, commits created, branches cleaned up.
+Report totals: issues closed, pushed to remote.
 
 ## Rules
-- Stage specific files per commit where possible — avoid `git add -A` unless all remaining changes belong to the same commit
-- If a file was changed for multiple issues, put it in the commit for the primary issue
-- Always push after committing — the user calling /git-issues-end means they have reviewed the changes
-- Do NOT close issues manually with `gh issue close` — the `Closes #N` in the commit message handles closure on push
-- If some changes look wrong or incomplete, flag them to the user instead of committing
+- Do NOT force push under any circumstances
+- Do NOT create new commits — all commits were already made by `/git-issues-start`
+- If some issues look wrong or incomplete based on commit history, flag them to the user instead of closing
+- Close issues via `gh issue close`, not via commit message keywords
