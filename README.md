@@ -6,7 +6,7 @@ A template repository containing reusable Claude Code commands and skills for Se
 
 Copy the `commands/` and `skills/` folders into your project. You can use this Claude Code prompt to do it:
 
-> Go to the `ServiceNowDevProgram/ServiceNow-SDK-CC-Starter` repo and pull the `commands/` and `skills/` folders into this project. Do not copy the README.
+> Use gh repo clone and git sparse-checkout to pull only the commands/ and skills/ folders from the private repo ServiceNowDevProgram/ServiceNow-SDK-CC-Starter into this project. Skip any files we already have in .claude/commands/. Do not copy READMEs.
 
 ## Commands
 
