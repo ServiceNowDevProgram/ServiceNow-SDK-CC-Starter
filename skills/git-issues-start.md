@@ -51,11 +51,11 @@ Log the full execution plan:
 ## Execution Plan
 
 ### Batch 1 (parallel)
-- #3: Fix draft timer reset → src/client/components/DraftTimer.jsx
-- #7: Add export button → src/client/components/PortfolioPanel.jsx, src/client/services/ExportService.js
+- #3: Fix header alignment → src/client/components/Header.jsx
+- #7: Add export action → src/client/components/Toolbar.jsx, src/client/services/ExportService.js
 
 ### Batch 2 (after Batch 1)
-- #12: Update scoring display → src/client/components/ScoreBar.jsx, src/fluent/seed-data.now.ts
+- #12: Add new seed fields → src/client/components/DetailPanel.jsx, src/fluent/seed-data.now.ts
 ⚠️ Sequential — shares seed-data.now.ts with a prior dependency
 ```
 
@@ -72,17 +72,17 @@ For each batch:
 
 2. For each issue in the batch, launch a sub-agent with `isolation: "worktree"` using this prompt structure:
 
-   > You are fixing a bug / implementing a feature for AICTsdk — "AI Control Tower: CoE Draft & Defend," a competitive ServiceNow scoped application used at Knowledge 26.
+   > You are fixing a bug / implementing a feature for this ServiceNow scoped application. Read CLAUDE.md (if present) at the repo root for project-specific context and conventions.
    >
    > ## Issue #<NUMBER>: <TITLE>
    > <BODY>
    >
-   > ## Project Conventions
-   > - **Frontend**: React 18 JSX with plain CSS. Components live in `src/client/components/` as paired files: `Name.jsx` + `Name.css`. No TypeScript on the client. CSS uses plain classes — no modules, no CSS-in-JS. Import the CSS file at the top of the JSX file.
-   > - **Services**: API modules in `src/client/services/` (plain JS). Follow existing patterns in nearby files.
-   > - **Server**: ServiceNow Script Includes and REST handlers in `src/server/`. Server-side JavaScript using GlideRecord API and scoped app patterns.
-   > - **Fluent layer**: TypeScript `.now.ts` files in `src/fluent/` using @servicenow/sdk 4.4.0 Fluent API (createTable, createBusinessRule, createScriptInclude, etc.).
-   > - **CSS file size**: Keep individual CSS files under ~13KB to avoid SDK extraction bugs on Windows.
+   > ## Project Conventions (typical ServiceNow SDK starter — override per-project in CLAUDE.md)
+   > - **Frontend components**: `src/client/components/` — typically paired files like `Name.jsx` + `Name.css`. Follow whatever pattern already exists in nearby files.
+   > - **Frontend services**: `src/client/services/` — API/service modules. Follow existing patterns.
+   > - **Server**: `src/server/script-includes/`, `src/server/rest-handlers/`, `src/server/rest-api/` — ServiceNow server-side JavaScript using GlideRecord and scoped-app patterns.
+   > - **Fluent layer**: `src/fluent/` — TypeScript `.now.ts` files using `@servicenow/sdk` Fluent API (createTable, createBusinessRule, createScriptInclude, etc.).
+   > - **Build/config**: `package.json`, root config files.
    >
    > ## Files to Read First
    > - <list of relevant files from your analysis>
@@ -115,47 +115,31 @@ For each batch:
    )"
    ```
 
-## Step 5: Merge all changes into main
+## Step 5: Gather changes into main working tree (uncommitted)
 
-After all batches complete:
+After all batches complete, transfer each worktree's changes into the main working tree as **uncommitted** changes so the user can review everything in one place before `/git-issues-end` commits and pushes.
 
 1. List all worktrees: `git worktree list`
 
 2. For each worktree (excluding the main working tree):
-   - Extract the issue number from the branch name (pattern: `issue-<number>-<slug>`)
-   - Stage all changes in the worktree:
+   - Stage all changes in the worktree so untracked files are included in the diff:
      ```
-     git -C <path> add -A
+     git -C <worktree-path> add -A
      ```
-   - Commit in the worktree:
+   - Produce a patch of the staged changes (use `--binary` so binary assets apply cleanly):
      ```
-     git -C <path> commit -m "$(cat <<'EOF'
-     Issue #<number>: <concise description of what changed>
-
-     Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-     EOF
-     )"
+     git -C <worktree-path> diff --cached --binary > /tmp/issue-<number>.patch
      ```
+   - Apply the patch to the main working tree (without staging):
+     ```
+     git apply /tmp/issue-<number>.patch
+     ```
+     If `git apply` fails because of overlap with an earlier batch's changes, resolve manually using context from both issues.
 
-3. Determine merge order — if worktrees have overlapping files, merge sequentially and resolve conflicts.
+3. **Do NOT stage, commit, or remove the worktrees here.** The user will review the uncommitted diff, and `/git-issues-end` will create commits, push, and clean up the worktrees.
 
-4. For each worktree branch, merge into main:
-   ```
-   git merge <branch> --no-ff --no-edit
-   ```
-   If a merge conflict occurs, resolve it using context from both issues and note the resolution in the summary.
-
-   **Important:** Do NOT use `Closes #N` or `Fixes #N` anywhere — issues must stay open until the user validates and runs `/git-issues-end`.
-
-5. Clean up each worktree after merging:
-   ```
-   git worktree remove <path>
-   git branch -d <branch>
-   ```
-
-6. Run `npm run build` on main to verify everything compiles cleanly.
-   - If the build fails, diagnose and fix, then create an additional commit: "Fix build error after merging issue #<number>"
-   - Run `npm run build` again to confirm it passes.
+4. Run `npm run build` on main to verify the combined uncommitted changes compile.
+   - If the build fails, diagnose and fix. Leave the fix uncommitted alongside the rest — `/git-issues-end` will commit it.
 
 ## Step 6: Present summary
 
@@ -166,19 +150,19 @@ Print a results table:
 
 List any issues that were skipped (ambiguous, conflicted, or failed) with reasons.
 
-All changes are now in main and worktrees have been cleaned up.
+All changes are now **uncommitted in the main working tree**. Worktrees are intact for `/git-issues-end` to clean up.
 
 Next steps:
-1. Run `/deploy` to build and deploy to the ServiceNow instance
-2. Test each change on the instance
-3. If further changes are needed, re-run `/git-issues-start` with specific issue numbers (e.g. `/git-issues-start 3 7`)
-4. When all changes are verified, run `/git-issues-end` to push and close issues
+1. Review the uncommitted diff (`git status`, `git diff`) to validate each change
+2. Optionally run `/deploy` against `dev` to smoke-test on an instance
+3. If something is wrong, edit files directly or discard pieces with `git checkout -- <file>`; re-run `/git-issues-start <number>` for a specific issue if you want to redo it
+4. When satisfied, run `/git-issues-end` — it will create issue-referencing commits, push, auto-close issues via `Closes #N`, and remove the worktrees
 
 ## Rules
 - Do NOT ask for approval or confirmation at any point — just do the work
 - Use `isolation: "worktree"` for each parallel agent to prevent conflicts
 - If an issue is ambiguous or clearly depends on out-of-scope changes, skip it and flag it in the summary
 - Prefer minimal, focused fixes — do not let agents refactor or over-engineer
-- Do NOT push to remote — leave that for `/git-issues-end`
-- Do NOT use `Closes` or `Fixes` in commit messages — issues must stay open until the user explicitly runs `/git-issues-end`
-- Always clean up worktrees and branches after merging into main
+- Do NOT commit, push, or merge — leave that for `/git-issues-end`
+- Do NOT remove worktrees — `/git-issues-end` removes them after committing
+- Agents inside worktrees must leave their changes uncommitted (see the agent prompt in Step 4)
