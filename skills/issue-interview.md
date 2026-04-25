@@ -154,6 +154,28 @@ gh issue view <issue-number> --json number,title,body,labels,comments
 
 Read the full issue: title, body, existing labels, and any prior comments.
 
+## Step 2.1: Download and view any attached images
+
+Issue bodies and comments may contain screenshots referenced as markdown images or bare URLs. The `gh` JSON output only gives you the URL — you must download the files and Read them to actually see the pixels.
+
+1. Scan the issue body and every comment body for image URLs. Match both forms:
+   - Markdown: `![alt](https://...)`
+   - Bare URLs ending in common image extensions (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
+   - GitHub attachment hosts: `github.com/user-attachments/assets/...`, `user-images.githubusercontent.com/...`, `private-user-images.githubusercontent.com/...` (these often have no extension in the path)
+
+2. If any are found, create a temp directory and download each one:
+   ```
+   mkdir -p /tmp/issue-<N>-attachments
+   curl -sL -o /tmp/issue-<N>-attachments/img-1.png "<url>"
+   ```
+   Use `curl -L` to follow redirects (GitHub attachment URLs redirect to signed S3 URLs). Number the files in the order they appear so you can correlate them back to the issue text.
+
+3. Read each downloaded file with the Read tool so the image contents are loaded into context.
+
+4. When interviewing the user later, reference screenshots by what they show (e.g. "the error state in the second screenshot"), not by URL.
+
+If no images are present, skip this step silently.
+
 ## Step 2.5: Research the codebase
 
 Before talking to the user, investigate the codebase to understand what already exists that's relevant to this issue. This prevents asking the user questions you could answer yourself by reading the code.
