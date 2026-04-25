@@ -21,7 +21,9 @@ Report: "Deploying to **<environment>** (<instance URL>)"
 
 ## Step 2: Build
 
-Run:
+First, check the recent conversation history. If the most recent significant activity was a successful `npm run build` (or equivalent) AND no source files have been edited since that build, skip this step and report: "Recent build detected — skipping rebuild." Then proceed to Step 3.
+
+Otherwise, run:
 ```
 npm run build
 ```
