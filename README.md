@@ -4,9 +4,9 @@ A template repository containing reusable Claude Code skills for ServiceNow SDK 
 
 ## Usage
 
-Copy the `skills/` folder into your project. You can use this Claude Code prompt to do it:
+Copy the `.claude/skills/` folder into your project. You can use this Claude Code prompt to do it:
 
-> Use gh repo clone and git sparse-checkout to pull only the skills/ folder from the private repo ServiceNowDevProgram/ServiceNow-SDK-CC-Starter into this project. Skip any files we already have in .claude/skills/. Do not copy READMEs.
+> Use gh repo clone and git sparse-checkout to pull only the .claude/skills/ folder from the private repo ServiceNowDevProgram/ServiceNow-SDK-CC-Starter into this project. Skip any files we already have in .claude/skills/. Do not copy READMEs.
 
 ## Skills
 
